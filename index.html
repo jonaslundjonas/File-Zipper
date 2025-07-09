@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Zipper</title>
+    <!-- Tailwind CSS CDN for Material Design 2 inspired styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for dark grey-scale Material Design 2 with red buttons */
+        body {
+            font-family: 'Inter', sans-serif; /* Using Inter font as per instructions */
+            background-color: #212121; /* Dark grey background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #303030; /* Darker card background */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4); /* More pronounced shadow for dark theme */
+            border-radius: 12px; /* Rounded corners */
+            padding: 2.5rem; /* Increased padding */
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+            border: 1px solid #424242; /* Dark grey border */
+        }
+        .input-group {
+            margin-bottom: 2rem; /* More spacing */
+            position: relative;
+        }
+        .file-input-label {
+            display: block;
+            background-color: #f44336; /* Material Red 500 */
+            color: #ffffff; /* White text */
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            font-weight: 600;
+            user-select: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            margin-top: 1rem;
+        }
+        .file-input-label:hover {
+            background-color: #e53935; /* Material Red 600 */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        input[type="file"] {
+            display: none; /* Hide default file input */
+        }
+        .zip-button {
+            background-color: #d32f2f; /* Material Red 700 for primary action */
+            color: #ffffff; /* White text */
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            border: none;
+            cursor: pointer;
+        }
+        .zip-button:hover {
+            background-color: #c62828; /* Material Red 800 */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        .zip-button:disabled {
+            background-color: #ef9a9a; /* Light Red 200 when disabled */
+            color: #ffffff;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .message {
+            margin-top: 1.5rem;
+            font-size: 0.95rem;
+            color: #bdbdbd; /* Light grey for messages */
+        }
+        .file-list {
+            text-align: left;
+            margin-top: 1.5rem;
+            padding: 0 1rem;
+            max-height: 150px; /* Limit height for scroll */
+            overflow-y: auto; /* Enable scrolling */
+            border: 1px solid #424242;
+            border-radius: 8px;
+            background-color: #3a3a3a; /* Slightly lighter than container for contrast */
+        }
+        .file-list p {
+            margin: 0.5rem 0;
+            color: #e0e0e0; /* Light grey text */
+            font-size: 0.9rem;
+        }
+        .download-link {
+            display: inline-block;
+            margin-top: 1.5rem;
+            color: #bdbdbd; /* Light grey for link */
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s ease;
+        }
+        .download-link:hover {
+            color: #ffffff; /* White on hover */
+            text-decoration: underline;
+        }
+        h1 {
+            color: #e0e0e0; /* Light grey for heading */
+        }
+        .footer-text {
+            margin-top: 2rem;
+            font-size: 0.8rem;
+            color: #616161; /* Medium grey for footer text */
+        }
+    </style>
+    <!-- JSZip CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-3xl font-bold mb-6">File Zipper</h1>
+
+        <div class="input-group">
+            <input type="file" id="fileInput" multiple>
+            <label for="fileInput" class="file-input-label">Select Files</label>
+            <div id="fileList" class="file-list hidden"></div>
+        </div>
+
+        <button id="zipButton" class="zip-button" disabled>
+            Zip Files
+        </button>
+
+        <p id="message" class="message"></p>
+
+        <a id="downloadLink" class="download-link hidden" href="#" download="archive.zip">
+            Download Zip
+        </a>
+
+        <p class="footer-text">Created by Jonas Lund 2025</p>
+    </div>
+
+    <script>
+        // Get references to DOM elements
+        const fileInput = document.getElementById('fileInput');
+        const zipButton = document.getElementById('zipButton');
+        const messageElement = document.getElementById('message');
+        const downloadLink = document.getElementById('downloadLink');
+        const fileListElement = document.getElementById('fileList');
+
+        let selectedFiles = []; // Array to store selected files
+
+        // Event listener for file input change
+        fileInput.addEventListener('change', (event) => {
+            selectedFiles = Array.from(event.target.files); // Convert FileList to Array
+            updateFileList(); // Update the displayed list of files
+            // Enable or disable the zip button based on whether files are selected
+            zipButton.disabled = selectedFiles.length === 0;
+            messageElement.textContent = ''; // Clear previous messages
+            downloadLink.classList.add('hidden'); // Hide download link
+        });
+
+        // Function to update the displayed list of files
+        function updateFileList() {
+            fileListElement.innerHTML = ''; // Clear existing list
+            if (selectedFiles.length > 0) {
+                fileListElement.classList.remove('hidden'); // Show the file list container
+                selectedFiles.forEach(file => {
+                    const p = document.createElement('p');
+                    p.textContent = file.name;
+                    fileListElement.appendChild(p);
+                });
+            } else {
+                fileListElement.classList.add('hidden'); // Hide if no files
+            }
+        }
+
+        // Event listener for the zip button click
+        zipButton.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) {
+                messageElement.textContent = 'Please select files first.';
+                return;
+            }
+
+            messageElement.textContent = 'Zipping files... Please wait.';
+            zipButton.disabled = true; // Disable button during zipping
+            downloadLink.classList.add('hidden'); // Hide download link
+
+            const zip = new JSZip(); // Create a new JSZip instance
+
+            // Add each selected file to the zip archive
+            for (const file of selectedFiles) {
+                try {
+                    // Read file content as ArrayBuffer
+                    const fileContent = await file.arrayBuffer();
+                    zip.file(file.name, fileContent); // Add file to zip
+                } catch (error) {
+                    console.error(`Error reading file ${file.name}:`, error);
+                    messageElement.textContent = `Error reading file ${file.name}. Please try again.`;
+                    zipButton.disabled = false;
+                    return;
+                }
+            }
+
+            try {
+                // Generate the zip file as a Blob with deflate compression
+                const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+
+                // Use FileSaver.js to save the file
+                saveAs(content, 'archive.zip');
+
+                messageElement.textContent = 'Files zipped successfully!';
+                // The download link is not strictly needed if using saveAs, but we can still show it
+                // downloadLink.href = URL.createObjectURL(content);
+                // downloadLink.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error generating zip file:', error);
+                messageElement.textContent = 'Error zipping files. Please try again.';
+            } finally {
+                zipButton.disabled = false; // Re-enable button
+            }
+        });
+    </script>
+</body>
+</html>
